@@ -428,7 +428,7 @@ end
 
             # Plot data (replace `data` with your actual data)
             lines!(ax1, rr * L * 1e4, (C[:, 4] .* 0.5145 ./ C[:, 1] ./ 0.1738 .- 1) .* 1000, linewidth = 1.5)
-            # lines!(ax2, rr * L * 1e4, sum(C[:, 1:5], dims = 2) ./ C[:, 6], linewidth = 1.5)
+            lines!(ax2, rr * L * 1e4, (sum(C[:, 1:5], dims = 2) ./ C[:, 6])[:], linewidth = 1.5)
             display(fig)
         end
 
@@ -461,8 +461,8 @@ end
 
         # Subplots
         ax1 = Axis(fig[1, 1], xlabel = "Time (years)", ylabel = "Zr radius")
-        ax2 = Axis(fig[1, 2], xlabel = "Time (years)", ylabel = "Temperature T, ^oC")
-        ax3 = Axis(fig[2, 1], xlabel = "Distance", ylabel = L"Growth Rate, cm.s^{-1}")
+        ax2 = Axis(fig[1, 2], xlabel = "Time (years)", ylabel = "Temperature T, C")
+        ax3 = Axis(fig[2, 1], xlabel = "Distance", ylabel = L"Growth Rate, μm/a^{-1}")
         ax4 = Axis(fig[2, 2], xlabel = "Distance, um", ylabel = L"\delta^{94/90}Zr")
         ax5 = Axis(fig[3, 1], xlabel = "Distance ", ylabel = "Zr/Hf")
 
