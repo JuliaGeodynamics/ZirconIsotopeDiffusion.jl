@@ -4,6 +4,8 @@ using Interpolations
 using Trapz
 using CSV
 using DataFrames
+using Test
+using BenchmarkTools
 
 #Helper functions
 function ZrSaturation(T) # defining Zr saturation conditions
@@ -47,6 +49,8 @@ function DiffusionCoefficient(T, x, DGfZr)  # defining Zr diffusion coefficients
     return Di
 end
 
+@test sum(DiffusionCoefficient((750 + 273.15), 2, (0.5))) ≈ 6.60069e-5 atol=1e-4
+
 function kdHf(T, par)
     X = 1000. / T
     KD_Hf = exp(11.29e3 / T  - 2.275) # true Kd_Hf from this model 2022
@@ -79,6 +83,9 @@ function kdHf(T, par)
     return KD
 end
 
+@test kdHf(1023.15, Dict("Trace" => "Hf")) ≈ 6371.245 atol=1e-3
+@btime kdHf($1023.15, $Dict("Trace" => "Hf"))
+
 function bc(X, par)
     ct = par["alpha"] .* X + par["beta"]
     grad = -par["D"] .* (ct - X)
@@ -101,12 +108,18 @@ function mf_magma(Tk)
     return CF
 end
 
+@btime mf_magma($1000)
+@test mf_magma(1000) ≈ 0.23081 atol = 1e-4
+
 function mf_rock(T)
     t2 = T .* T
     t7 = exp.(0.961026371384066e3 .- 0.3590508961e1 .* T .+ 0.4479483398e-2 .* t2 .- 0.1866187556e-5 .* t2 .* T)
     CF = 0.1e1 ./ (0.1e1 .+ t7)
     return CF
 end
+
+@btime mf_rock($1000)
+@test mf_rock(1000) ≈ 0.99999 atol = 1e-4
 
 function progonka(C0,dt,it,parameters)
 
