@@ -241,22 +241,22 @@ end #20.516 ns (0 allocations: 0 bytes)
 @btime mf_rock($1000)
 @test mf_rock(1000) ≈ 0.99999 atol = 1e-4
 
-function progonka(C0, dt, it, Di, Xs, Temp, MeltFrac, Dplag, parameter::NumericalParameters, BC_parameters::BoundaryParameters, TraceElement::TraceElements; R = range(0, stop=1, length=n))
+function progonka(C0, dt, i, Di, Xs, Temp, MeltFrac, Dplag, parameter::NumericalParameters, BC_parameters::BoundaryParameters, TraceElement::TraceElements; R = range(0, stop=1, length=n))
     CZirc = BC_parameter.Cz;
     # XH2O = parameter.XH20;
-    Temp = Temp[it];
+    Temp_i = Temp[i];
     MeltFrac_new = MeltFrac[it+1];
     MeltFrac_old = MeltFrac[it-1];
     MeltFrac = MeltFrac[it];
-    S = (Xs^3.0 + MeltFrac*(1.0 - Xs.^3.0))^(1.0/3.0); # rad of the melt shell
+    S = (Xs^3 + MeltFrac*(1.0 - Xs^3))^(1.0/3.0); # rad of the melt shell
 
-    Dif  = DiffusionCoefficient(Temp, parameter.XH20, parameter.DGfZr, Di, parameter.mass)/Dscale; #see below Diff Coeff dependednt on water and T in cm2/s
+    Dif  = DiffusionCoefficient(Temp_i, parameter.XH20, parameter.DGfZr, Di, parameter.mass)/Dscale; #see below Diff Coeff dependednt on water and T in cm2/s
     Csat = ZrSaturation(Temp);
 
     Czl = CZirc*C0[1,1]/Csat;
     Czh = CZirc*C0[1,4]/Csat;
 
-    @. Dflux[1:5]=Dif[1:5]*(C0[2,1:5] - C0[1,1:5])/(R[2]-R[1])/(S-Xs);
+    @. (Dflux[i]=(Dif[i])*(C0[2,i] - C0[1,i])/(R[2]-R[1])/(S-Xs) for i in 1:5);
     # Dflux[1:5]=Dif[1:5].*(C0[2,1:5] - C0[1,1:5])/(R[2]-R[1])/(S-Xs);
     V=-sum(Dflux)/(CZirc*parameter.RhoZrM-Csat);
 
@@ -267,10 +267,10 @@ function progonka(C0, dt, it, Di, Xs, Temp, MeltFrac, Dplag, parameter::Numerica
     end
 
     W=(1/3)*(diffF*(1-Xs^3)-3*Xs^2*V*(MeltFrac-1))/((-MeltFrac+1)*Xs^3+MeltFrac)^(2/3);
-    dC=sum(C0[n,1:5])-Csat;
+    dC=sum(C0[n,i]for i in 1:5)-Csat;
     t4 = tanh(parameter.delta * (dC - parameter.Crit));
     t7 = tanh(parameter.delta * parameter.Crit);
-    @. Dplag[1:5] = 0.1e1 / (0.1e1 + t7) * (t4 * (parameter.Kmax - parameter.Kmin) + parameter.Kmax * t7 + parameter.Kmin);
+    @. (Dplag[i] for i in 1:5) = 0.1e1 / (0.1e1 + t7) * (t4 * (parameter.Kmax - parameter.Kmin) + parameter.Kmax * t7 + parameter.Kmin);
     Dplag[6]=parameter.Ktrace;
 
     @. D[n,:]=-Dif[:]-W*(R[end]-R[end-1])*(S-Xs)*(1-Dplag[:]);
