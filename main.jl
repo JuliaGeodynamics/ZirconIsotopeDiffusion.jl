@@ -4,7 +4,7 @@ using Interpolations
 using Trapz
 using CSV
 using DataFrames
-using Parameters; export @with_kw, @unpack
+using Parameters; export @kwdef, @unpack
 using MuladdMacro
 using BenchmarkTools, Test
 
@@ -13,7 +13,7 @@ abstract type NumericalParameters end
 abstract type BoundaryParameters end
 abstract type TraceElements end
 
-@with_kw struct parameters <: NumericalParameters
+@kwdef struct parameters<:NumericalParameters
     Tsat::Float64           = 1032.5  # Starting at saturation
     Tend::Float64           = 695     # final temperature, C
     tfin::Float64           = 1500    # final time
@@ -31,7 +31,7 @@ abstract type TraceElements end
     mass::Array{Float64}    = [89.9047026,90.9056439,91.9050386,93.9063148,95.908275]
 end
 
-@with_kw mutable struct BC_parameters <: BoundaryParameters
+@kwdef mutable struct BC_parameters <: BoundaryParameters
     D::Array{Float64,1}     = []
     csat::Float64           = 0
     alpha::Array{Float64,1} = []
@@ -41,115 +41,115 @@ end
     Trace::String           = "Hf"
 end
 
-@with_kw struct Hf_TraceElement{_T} <: TraceElements
+@kwdef struct Hf_TraceElement{_T} <: TraceElements
     a::_T = 11.29e3
     b::_T = 2.275
 end
 
-@with_kw struct Ti_TraceElement{_T} <: TraceElements
+@kwdef struct Ti_TraceElement{_T} <: TraceElements
     a::_T = -11.05e3
     b::_T = 6.06
 end
 
-@with_kw struct Y_TraceElement{_T} <: TraceElements
+@kwdef struct Y_TraceElement{_T} <: TraceElements
     a::_T = 19.47
     b::_T = 13.04
 end
 
-@with_kw struct U_TraceElement{_T} <: TraceElements
+@kwdef struct U_TraceElement{_T} <: TraceElements
     a::_T = 15.32
     b::_T = 9.17
 end
 
-@with_kw struct Th_TraceElement{_T} <: TraceElements
+@kwdef struct Th_TraceElement{_T} <: TraceElements
     a::_T = 13.02e3
     b::_T = 8.54
 end
 
-@with_kw struct Sm_TraceElement{_T} <: TraceElements
+@kwdef struct Sm_TraceElement{_T} <: TraceElements
     a::_T = 13.338
     b::_T = -0.622
 end
 
-@with_kw struct Dy_TraceElement{_T} <: TraceElements
+@kwdef struct Dy_TraceElement{_T} <: TraceElements
     a::_T = 2460.0
     b::_T = -0.867
 end
 
-@with_kw struct Yb_TraceElement{_T} <: TraceElements
+@kwdef struct Yb_TraceElement{_T} <: TraceElements
     a::_T = 33460.0
     b::_T = -1.040
 end
 
-@with_kw struct P_TraceElement{_T} <: TraceElements
+@kwdef struct P_TraceElement{_T} <: TraceElements
     a::_T = 7.646
     b::_T = 5.047
 end
 
 
-function KD_trace1(T::_T, par::Hf_TraceElement{_T})  where {_T <: Real}
+function KD_trace(T::_T, par::Hf_TraceElement{_T})  where {_T <: Real}
     return exp(par.a / T  - par.b) # true Kd_Hf from this model 2022
 end #  5.804 ns (0 allocations: 0 bytes)
 
-function KD_trace1(T::_T, par::Ti_TraceElement{_T})  where {_T <: Real}
+function KD_trace(T::_T, par::Ti_TraceElement{_T})  where {_T <: Real}
     return exp(par.a / T  + par.b) # true Kd_Hf from this model 2022
 end
 
-function KD_trace1(T::_T, par::Y_TraceElement{_T})  where {_T <: Real}
+function KD_trace(T::_T, par::Y_TraceElement{_T})  where {_T <: Real}
     X = 1000.0 / T
     return exp(par.a * X - par.b)
 end
 
-function KD_trace1(T::_T, par::U_TraceElement{_T})  where {_T <: Real}
+function KD_trace(T::_T, par::U_TraceElement{_T})  where {_T <: Real}
     X = 1000.0 / T
     return exp(par.a * X - par.b)
 end
 
-function KD_trace1(T::_T, par::Th_TraceElement{_T})  where {_T <: Real}
+function KD_trace(T::_T, par::Th_TraceElement{_T})  where {_T <: Real}
     return exp(par.a / T - par.b)
 end
 
-function KD_trace1(T::_T, par::Sm_TraceElement{_T})  where {_T <: Real}
+function KD_trace(T::_T, par::Sm_TraceElement{_T})  where {_T <: Real}
     Csat = ZrSaturation(T)
     KD = (par.a * Csat^(par.b))
     return KD
 end
 
-function KD_trace1(T::_T, par::Dy_TraceElement{_T})  where {_T <: Real}
+function KD_trace(T::_T, par::Dy_TraceElement{_T})  where {_T <: Real}
     Csat = ZrSaturation(T)
     KD = (par.a * Csat^(par.b))
     return KD
 end #  29.332 ns (0 allocations: 0 bytes)
 
-function KD_trace1(T::_T, par::Yb_TraceElement{_T})  where {_T <: Real}
+function KD_trace(T::_T, par::Yb_TraceElement{_T})  where {_T <: Real}
     Csat = ZrSaturation(T)
     KD = (par.a * Csat^(par.b))
     return KD
 end
 
-function KD_trace1(T::_T, par::P_TraceElement{_T})  where {_T <: Real}
+function KD_trace(T::_T, par::P_TraceElement{_T})  where {_T <: Real}
     X = 1000.0 / T
     return exp(par.a * X - par.b)
 end
 
 # Hf_trace = Hf_TraceElement()
-# @btime KD_trace1($1000.0,$Hf_trace) # 5.731
+# @btime KD_trace($1000.0,$Hf_trace) # 5.731
 # Ti_trace = Ti_TraceElement()
-# @btime KD_trace1($1000.0,$Ti_trace) #5.807
+# @btime KD_trace($1000.0,$Ti_trace) #5.807
 # Y_trace = Y_TraceElement()
-# @btime KD_trace1($1000.0,$Y_trace) #6.363
+# @btime KD_trace($1000.0,$Y_trace) #6.363
 # U_trace = U_TraceElement()
-# @btime KD_trace1($1000.0,$U_trace) # 6.118
+# @btime KD_trace($1000.0,$U_trace) # 6.118
 # Th_trace = Th_TraceElement()
-# @btime KD_trace1($1000.0,$Th_trace) #5.734
+# @btime KD_trace($1000.0,$Th_trace) #5.734
 # Sm_trace = Sm_TraceElement()
-# @btime KD_trace1($1000.0,$Sm_trace) #29.337
+# @btime KD_trace($1000.0,$Sm_trace) #29.337
 # Dy_trace = Dy_TraceElement()
-# @btime KD_trace1($1000.0,$Dy_trace) #29.316
+# @btime KD_trace($1000.0,$Dy_trace) #29.316
 # Yb_trace = Yb_TraceElement()
-# @btime KD_trace1($1000.0,$Yb_trace) # 28.672
+# @btime KD_trace($1000.0,$Yb_trace) # 28.672
 # P_trace = P_TraceElement()
-# @btime KD_trace1($1000.0,$P_trace)  # 7.072
+# @btime KD_trace($1000.0,$P_trace)  # 7.072
 
 
 
@@ -199,17 +199,17 @@ end   #112.346 ns (2 allocations: 32 bytes)
 
 Di = zeros(6)
 parameter_test = parameters()
-@btime DiffusionCoefficient($1023.15, $2, $0.5, $Di, $parameter_test.mass)
-@test sum(DiffusionCoefficient(1023.15, 2, 0.5, Di, parameter_test.mass)) ≈ 6.6006e-5 atol = 1e-4
+@btime DiffusionCoefficient($1023.15, $2.0, $0.5, $Di, $parameter_test.mass)
+@test sum(DiffusionCoefficient(1023.15, 2.0, 0.5, Di, parameter_test.mass)) ≈ 6.6006e-5 atol = 1e-4
 
-function bc(X::_T, BC_parameters::BoundaryParameters, TraceElement::TraceElements) where {_T}
+function bc(X::_T, Eq::_T, BC_parameters::BoundaryParameters, TraceElement::TraceElements) where {_T}
     ct = BC_parameters.alpha .* X +BC_parameters.beta
     grad = -BC_parameters.D .* (ct - X)
     # Eq = zeros(6)
-    Eq[1] = sum(X[1:5]) - BC_parameters.csat
+    Eq[1] = sum(X[i] for i in 1:5) - BC_parameters.csat
     @. Eq[2:5] = grad[2:5] * X[1] - X[2:5] * grad[1]
     # @. Eq[2:5] = grad[2:5] * X[1] - X[2:5]' * grad[1] #matlab version
-    KD_Hf = KD_trace1(BC_parameters.T, TraceElement)
+    KD_Hf = KD_trace(BC_parameters.T, TraceElement)
     # KD_Hf = kdHf(BC_parameters.T, BC_parameters)
     CHfs = X[6] * KD_Hf
     Cz = BC_parameters.Cz * X[1] / BC_parameters.csat
@@ -229,21 +229,20 @@ function mf_magma(Tk::_T) where {_T <: Real}
 end #18.418 ns (0 allocations: 0 bytes)
 
 @btime mf_magma($1000)
-@test mf_magma(1000) ≈ 0.23081 atol = 1e-4
+@test mf_magma(1000.0) ≈ 0.23081 atol = 1e-4
 
 function mf_rock(T::_T) where {_T <: Real}
-    t2 = T^2
+    t2 = T * T
     t7 = exp(@muladd 0.961026371384066e3 - 0.3590508961e1 * T + (0.4479483398e-2- 0.1866187556e-5 * T) * t2)
-    CF = inv(1 + t7)
+    CF = inv(1.0 + t7)
     return CF
 end #20.516 ns (0 allocations: 0 bytes)
 
 @btime mf_rock($1000)
-@test mf_rock(1000) ≈ 0.99999 atol = 1e-4
+@test mf_rock(1000.0) ≈ 0.99999 atol = 1e-4
 
-function progonka(C0, dt, it, Di, Xs, Temp, MeltFrac, Dplag, parameter::NumericalParameters, BC_parameters::BoundaryParameters, TraceElement::TraceElements; R = range(0, stop=1, length=n))
-    CZirc = BC_parameter.Cz;
-    # XH2O = parameter.XH20;
+function progonka(C0, dt, it, Di, Xs, Temp, MeltFrac, Dplag, Dscale, Dflux, parameter::NumericalParameters, BC_parameters::BoundaryParameters, TraceElement::TraceElements; A=A, B=B, C=C, D=D, F=F, alpha=alpha, beta= beta, Eq=Eq, n=500, R = range(0, stop=1, length=n))
+    CZirc = BC_parameters.Cz;
     Temp = Temp[it];
     MeltFrac_new = MeltFrac[it+1];
     MeltFrac_old = MeltFrac[it-1];
@@ -261,25 +260,25 @@ function progonka(C0, dt, it, Di, Xs, Temp, MeltFrac, Dplag, parameter::Numerica
     V=-sum(Dflux)/(CZirc*parameter.RhoZrM-Csat);
 
     if it>1
-        diffF=(MeltFrac_new-MeltFrac_old)/dt/2;
+        diffF=(MeltFrac_new-MeltFrac_old)*inv(dt)*0.5;
     else
-        diffF=(MeltFrac_new-MeltFrac)/dt;
+        diffF=(MeltFrac_new-MeltFrac)*inv(dt);
     end
 
-    W=(1/3)*(diffF*(1-Xs^3)-3*Xs^2*V*(MeltFrac-1))/((-MeltFrac+1)*Xs^3+MeltFrac)^(2/3);
+    @muladd W=(1/3)*(diffF*(1-Xs^3)-3*Xs^2*V*(MeltFrac-1))/((-MeltFrac+1)*Xs^3+MeltFrac)^(2/3);
     dC=sum(C0[n,i] for i in 1:5)-Csat;
     t4 = tanh(parameter.delta * (dC - parameter.Crit));
     t7 = tanh(parameter.delta * parameter.Crit);
-    @. Dplag[1:5]= 0.1e1 / (0.1e1 + t7) * (t4 * (parameter.Kmax - parameter.Kmin) + parameter.Kmax * t7 + parameter.Kmin);
+    @. Dplag[1:5]= @muladd 0.1e1 / (0.1e1 + t7) * (t4 * (parameter.Kmax - parameter.Kmin) + parameter.Kmax * t7 + parameter.Kmin);
     Dplag[6]=parameter.Ktrace;
 
-    @. D[n,:]=-Dif[:]-W*(R[end]-R[end-1])*(S-Xs)*(1-Dplag[:]);
+    @. D[n,:]= @muladd -Dif[:]-W*(R[end]-R[end-1])*(S-Xs)*(1-Dplag[:]);
     @. A[n,:]=Dif[:];
     @. F[n,:]=0;
     # Coefficients for Thomas method
     s = Xs
     for j in 1:6
-        for i in 2:n-1
+        @muladd for i in 2:n-1
             psi1 = R[i-1]
             psi2 = R[i]
             psi3 = R[i+1]
@@ -324,7 +323,7 @@ function progonka(C0, dt, it, Di, Xs, Temp, MeltFrac, Dplag, parameter::Numerica
     # @show CZirc
     # BC_parameters.Trace = parameter.Trace
 
-    f = (X) -> bc(X, BC_parameters, TraceElement) # function of dummy variable y
+    f = (X) -> bc(X, Eq, BC_parameters, TraceElement) # function of dummy variable y
     result = NLsolve.nlsolve(f, C0[1,:], method = :trust_region) #NLsolve doesnt provide the Levenberg-Marquart method, but trust_region comes close to it
     out = result.zero  # solution vector
 
@@ -352,7 +351,8 @@ function TemperatureHistory_m_erupt(tr, Tr, nt, par::NumericalParameters)
         Tr[istart-1] = 950 + 273.15
         tr[istart-1] = tr[istart] - 5
         dT = 0.05
-        if minimum(mf_rock.(Tr)) < 0.01
+        if minimum(mf_rock(Ti) for Ti in Tr) < 0.01
+        # if minimum(mf_rock.(Tr)) < 0.01
             println("no melting")
             return Float64[], Float64[], Float64[]
         end
@@ -387,7 +387,7 @@ function TemperatureHistory_m_erupt(tr, Tr, nt, par::NumericalParameters)
 end
 
 
-function ZirconIsotopeDiffusion(; n = 500, nt = 500, tyear = (3600*24*365))
+@views function ZirconIsotopeDiffusion(; n = 500, nt = 500, tyear = (3600*24*365))
 
     Runname = "Test"
     !isdir("Results") && mkpath("Results")
@@ -399,7 +399,7 @@ function ZirconIsotopeDiffusion(; n = 500, nt = 500, tyear = (3600*24*365))
     n = 500 # number of points in radial mesh. Can be changed by user depends on desired accuracy
     nt = 500
     CZirc = 490000.0 # zirconium concentration in zircon, ppm
-    XH2O = 2 # initial water content in melt, required for diffusion coefficient simulations.
+    XH2O = 2.0 # initial water content in melt, required for diffusion coefficient simulations.
     Tsolidus = 400 + 273 # arbitrary solidus temperature for phase diagram used
     Csupsat = 3 # ppm supersaturation to cause nucleation of a new crystal upon cooling
     UCR = 1 # Critical concentration for microZircon nucleation on major minerals
@@ -505,7 +505,7 @@ function ZirconIsotopeDiffusion(; n = 500, nt = 500, tyear = (3600*24*365))
     @views C0[:, 3] .= ZrSaturation(Temp[1]) * 0.1715
     @views C0[:, 4] .= ZrSaturation(Temp[1]) * 0.1738
     @views C0[:, 5] .= ZrSaturation(Temp[1]) * 0.0280
-    @views C0[:, 6] .= CZirc / KD_trace(Temp[1], parameter) / 70
+    @views C0[:, 6] .= CZirc / KD_trace(Temp[1], TraceElement) / 70
     # C0[1:n,6] = 50  # PHOSHPORUS< CHANGEHF melt from Bachmann etal JPet 2002.
     Dplag[1:5] .= 0.1
     Dplag[6] = 0.1
@@ -519,7 +519,7 @@ function ZirconIsotopeDiffusion(; n = 500, nt = 500, tyear = (3600*24*365))
     UU[1] = C0[1, 1]
     tt[1] = time[1] * tscale
     Zcomp[1,1] = C0[1, 4] / C0[1, 1]
-    ZrHF[1,1] = CZirc / KD_trace(Temp[1], parameter) / C0[1, 6]
+    ZrHF[1,1] = CZirc / KD_trace(Temp[1], TraceElement) / C0[1, 6]
     # Zcomp[1] = C0[1, 4] / C0[1, 1] #matlab version
     # ZrHF[1] = CZirc / KD_trace(Temp[1], par) / C0[1, 6] #matlab version
     Melndelta[1,1] = Zcomp[1,1]
@@ -533,7 +533,7 @@ function ZirconIsotopeDiffusion(; n = 500, nt = 500, tyear = (3600*24*365))
     for i = 2:nt-1
     # for i = 2:200
         if MeltFrac[i] > 0.01
-            C, Czl, Czh, Csat, Dif, S, Dplag, V, W = progonka(C0,dt,i,Di,Xs,Temp,MeltFrac, Dplag,parameter, BC_parameter, TraceElement)
+            C, Czl, Czh, Csat, Dif, S, Dplag, V, W = progonka(C0,dt,i,Di,Xs,Temp,MeltFrac, Dplag, Dscale,Dflux,parameter, BC_parameter, TraceElement; A=A, B=B, C=C, D=D,F=F, alpha=alpha, beta=beta,Eq=Eq, n=n, R=R)
             dt = time[i] - time[i-1]
             C0 = C
         else
@@ -585,7 +585,7 @@ function ZirconIsotopeDiffusion(; n = 500, nt = 500, tyear = (3600*24*365))
         Zcomph[i] = Czh / CZirc
         Zcomp[1,i] = C[1, 4] / C[1, 1]
         Melndelta[1,i] = Ch / Cl
-        ZrHF[i] = CZirc / KD_trace(Temp[i], parameter) / C0[1, 6]
+        ZrHF[i] = CZirc / KD_trace(Temp[i], TraceElement) / C0[1, 6]
         CC[i, 1:n, 1:6] = C0[1:n, 1:6]
     end
     # Plot results (if iplot is set)
