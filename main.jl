@@ -4,7 +4,7 @@ using Interpolations
 using Trapz
 using CSV
 using DataFrames
-using Parameters; export @kwdef, @unpack
+# using Parameters; export @kwdef, @unpack
 using MuladdMacro
 using BenchmarkTools, Test
 
@@ -13,32 +13,32 @@ abstract type NumericalParameters end
 abstract type BoundaryParameters end
 abstract type TraceElements end
 
-@kwdef struct parameters<:NumericalParameters
-    Tsat::Float64           = 1032.5  # Starting at saturation
-    Tend::Float64           = 695     # final temperature, C
-    tfin::Float64           = 1500    # final time
-    Cbulk::Float64          = 100
-    RhoZrM::Float64         = 4.7/2.3 # Ratio of zircon to melt density
-    Kmin::Float64           = 0.1     # Parameters for zirconium partition coefficient in major phase
-    Kmax::Float64           = 0.1
-    Crit::Float64           = 30
-    delta::Float64          = 0.2
-    Ktrace::Float64         = 0.1     # trace partition coefficient in major phase.
-    Trace::String           = "Hf"
-    XH20::Float64           = 2       # initial water content in melt, required for diffusion coefficient simulations.
-    L::Float64              = 0.1     #20e-4*(CZirc/CbulkZr)^(1./3.); radius of melt cel
-    DGfZr::Float64          = 0.5     # diffusion coefficient ratio
-    mass::Array{Float64}    = [89.9047026,90.9056439,91.9050386,93.9063148,95.908275]
+@kwdef struct parameters{T,S,V} <:NumericalParameters
+    Tsat::T           = 1032.5  # Starting at saturation
+    Tend::T           = 695e0   # final temperature, C
+    tfin::T           = 1500e0  # final ttime
+    Cbulk::T          = 100e0
+    RhoZrM::T         = 4.7/2.3 # Ratio of zircon to melt density
+    Kmin::T           = 0.1     # Parameters for zirconium partition coefficient in major phase
+    Kmax::T           = 0.1
+    Crit::T           = 30e0
+    delta::T          = 0.2
+    Ktrace::T         = 0.1     # trace partition coefficient in major phase.
+    Trace::S          = "Hf"
+    XH20::T           = 2e0     # initial water content in melt, required for diffusion coefficient simulations.
+    L::T              = 0.1     # 20e-4*(CZirc/CbulkZr)^(1./3.); radius of melt cel
+    DGfZr::T          = 0.5     # diffusion coefficient ratio
+    mass::V           = [89.9047026,90.9056439,91.9050386,93.9063148,95.908275]
 end
 
-@kwdef mutable struct BC_parameters <: BoundaryParameters
-    D::Array{Float64,1}     = []
-    csat::Float64           = 0
-    alpha::Array{Float64,1} = []
-    beta::Array{Float64,1}  = []
-    T::Float64              = 0
-    Cz::Float64             = 0
-    Trace::String           = "Hf"
+@kwdef mutable struct BC_parameters{FP, V, S} <: BoundaryParameters
+    D::V               = Float64[]
+    csat::FP           = 0e0
+    alpha::V           = Float64[]
+    beta::V            = Float64[]
+    T::FP              = 0e0
+    Cz::FP             = 0e0
+    Trace::S           = "Hf"
 end
 
 @kwdef struct Hf_TraceElement{_T} <: TraceElements
@@ -180,27 +180,30 @@ function ZrSaturation(T::_T)  where {_T<: Real}# defining Zr saturation conditio
     return Csat
 end #1.484 ns (0 allocations: 0 bytes)
 
-# @btime ZrSaturation(750 + 273.15)
+@btime ZrSaturation($(750 + 273.15))
 
-function DiffusionCoefficient(T::_T, x::_T, DGfZr::_T, Di::AbstractArray, mass::AbstractArray) where {_T<:Real} # defining Zr diffusion coefficients in melts as f(T,X2O)
+function DiffusionCoefficient!(Di::AbstractArray, T::_T, x::_T, DGfZr::_T,  mass::AbstractArray) where {_T<:Real} # defining Zr diffusion coefficients in melts as f(T,X2O)
     theta = 1000.0 / T
     lnD   = -(11.4*x+3.13)/(0.84*x+1)-(21.4*x+47)/(1.06*x+1)*theta;  # best fit of Zr Diff coefficients (several workers) and WH83 dependence on XH2O
-    Dif   = exp(lnD)*1e4*365*24*3600;  # in cm2/y
+    # Dif   = exp(lnD)#*1e4*365*24*3600;  # in cm2/y
+    cm2yr = 1e4*365*24*3600
+    Dif   = cm2yr * exp(lnD)  # in cm2/y
     # bet = 0.05  # +0.059 Watkins et al., 2017; Méheut et al., 2021
     # Di = zeros(6)
     for i in 1:5
-        Di[i]=Dif*(mass[1]./mass[i]).^0.05
+        Di[i]=Dif*(mass[1]/mass[i])^0.05
     end
     # lnHf = -3.52 - 231.09 / 8.31 / theta
     # lnD_Hf = (-8.620340372 * T - 42705.17449 - .318918919 * x * T + 4049.500765 * x) / T
     Di[6] = Dif[1] * DGfZr  # exp(lnD_Hf) * 1e4 * 365 * 24 * 3600  # in cm2/y
-    return Di
+    return nothing
 end   #112.346 ns (2 allocations: 32 bytes)
 
 Di = zeros(6)
 parameter_test = parameters()
-@btime DiffusionCoefficient($1023.15, $2.0, $0.5, $Di, $parameter_test.mass)
-@test sum(DiffusionCoefficient(1023.15, 2.0, 0.5, Di, parameter_test.mass)) ≈ 6.6006e-5 atol = 1e-4
+@btime DiffusionCoefficient!($Di, $1023.15, $2.0, $0.5, $parameter_test.mass)
+DiffusionCoefficient!(Di, 1023.15, 2.0, 0.5, parameter_test.mass)
+@test sum(Di) ≈ 6.6006e-5 atol = 1e-5
 
 function bc(X::_T, Eq::_T, BC_parameters::BoundaryParameters, TraceElement::TraceElements) where {_T}
     ct = BC_parameters.alpha .* X +BC_parameters.beta
@@ -217,8 +220,10 @@ function bc(X::_T, Eq::_T, BC_parameters::BoundaryParameters, TraceElement::Trac
     return Eq
 end #2.548 ns (0 allocations: 0 bytes)
 
-
-# @btime f = (X) -> bc(X, $BC_parameter)
+Eq = zeros(6)
+BC_parameter_test = BC_parameters()
+TraceElement_test = Hf_TraceElement()
+@btime f = (X) -> bc(X, Eq, $BC_parameter_test, $TraceElement_test)
 
 function mf_magma(Tk::_T) where {_T <: Real}
     T = Tk - 273.15
@@ -249,68 +254,90 @@ function progonka(C0, dt, it, Di, Xs, Temp, MeltFrac, Dplag, Dscale, Dflux, para
     MeltFrac = MeltFrac[it];
     S = (Xs^3 + MeltFrac*(1.0 - Xs^3))^(1.0/3.0); # rad of the melt shell
 
-    Dif  = DiffusionCoefficient(Temp, parameter.XH20, parameter.DGfZr, Di, parameter.mass)/Dscale; #see below Diff Coeff dependednt on water and T in cm2/s
+    DiffusionCoefficient!(Di, Temp, parameter.XH20, parameter.DGfZr, parameter.mass)
+    Dif = Di
+    Dif ./=Dscale; #see below Diff Coeff dependednt on water and T in cm2/s
     Csat = ZrSaturation(Temp);
 
     Czl = CZirc*C0[1,1]/Csat;
     Czh = CZirc*C0[1,4]/Csat;
 
-    @. Dflux[1:5]=Dif[1:5]*(C0[2,1:5] - C0[1,1:5])/(R[2]-R[1])/(S-Xs);
-    # Dflux[1:5]=Dif[1:5].*(C0[2,1:5] - C0[1,1:5])/(R[2]-R[1])/(S-Xs);
-    V=-sum(Dflux)/(CZirc*parameter.RhoZrM-Csat);
+    cte = inv(R[2]-R[1])
+    ctf = inv(S-Xs)
+    V = 0.0
+    for j in 1:5
+        @inbounds Dflux[j] = a = Dif[j]*(C0[2,j] - C0[1,j]) * cte * ctf;
+        V += a
+    end
+    V = -V/(CZirc*parameter.RhoZrM-Csat);
+    # @. Dflux[1:5]=Dif[1:5]*(C0[2,1:5] - C0[1,1:5])* cte *ctf;
+    # V=-sum(Dflux)/(CZirc*parameter.RhoZrM-Csat);
 
-    if it>1
-        diffF=(MeltFrac_new-MeltFrac_old)*inv(dt)*0.5;
+    diffF= if it>1
+        (MeltFrac_new-MeltFrac_old)*inv(dt)*0.5;
     else
-        diffF=(MeltFrac_new-MeltFrac)*inv(dt);
+        (MeltFrac_new-MeltFrac)*inv(dt);
     end
 
     @muladd W=(1/3)*(diffF*(1-Xs^3)-3*Xs^2*V*(MeltFrac-1))/((-MeltFrac+1)*Xs^3+MeltFrac)^(2/3);
     dC=sum(C0[n,i] for i in 1:5)-Csat;
     t4 = tanh(parameter.delta * (dC - parameter.Crit));
     t7 = tanh(parameter.delta * parameter.Crit);
-    @. Dplag[1:5]= @muladd 0.1e1 / (0.1e1 + t7) * (t4 * (parameter.Kmax - parameter.Kmin) + parameter.Kmax * t7 + parameter.Kmin);
+    cte =  @muladd 0.1e1 / (0.1e1 + t7) * (t4 * (parameter.Kmax - parameter.Kmin) + parameter.Kmax * t7 + parameter.Kmin);
+    for j in 1:5
+        Dplag[j] = cte
+    end
     Dplag[6]=parameter.Ktrace;
 
-    @. D[n,:]= @muladd -Dif[:]-W*(R[end]-R[end-1])*(S-Xs)*(1-Dplag[:]);
-    @. A[n,:]=Dif[:];
-    @. F[n,:]=0;
+    for j in axes(D,2)
+        Dif_j = Dif[j]
+        D[n,j] = @muladd -Dif_j-W*(R[end]-R[end-1])*(S-Xs)*(1-Dplag[j]);
+        A[n,j] = Dif_j
+        F[n,j] = 0;
+    end
     # Coefficients for Thomas method
     s = Xs
-    for j in 1:6
-        @muladd for i in 2:n-1
+    for j in axes(F,2)
+        @inbounds for i in 2:n-1
             psi1 = R[i-1]
             psi2 = R[i]
             psi3 = R[i+1]
             t1 = Dif[j] * dt
-            t5 = (psi1 * S - psi1 * s + s) ^ 2
+            @muladd t5 = (psi1 * S - psi1 * s + s) ^ 2
             t6 = psi2 - psi1
             t8 = t5 / t6
             t12 = S * psi2
-            t14 = ((-psi2 + 1) * s + t12) ^ 2
+            @muladd t14 = ((-psi2 + 1) * s + t12) ^ 2
             t15 = S - s
             t20 = (-W + V) * psi2 - V
-            A[i,j] = -t14 * t15 * dt * psi2 * t20 - t1 * t8
-            t25 = (-psi2 * s + s + t12) ^ 2
+            @muladd A[i,j] = -t14 * t15 * dt * psi2 * t20 - t1 * t8
+            @muladd t25 = (-psi2 * s + s + t12) ^ 2
             t28 = t25 / (psi3 - psi2)
             B[i,j] = -t1 * t28
             t32 = -t15
             t33 = t32 ^ 2
             t34 = -t6
-            t38 = (t32 * psi2 - s) ^ 2
-            D[i,j] = -t1 * (-t28 - t8) - t33 * t34 * t38 - t20 * psi2 * dt * t38 * t32
+            @muladd t38 = (t32 * psi2 - s) ^ 2
+            @muladd D[i,j] = -t1 * (-t28 - t8) - t33 * t34 * t38 - t20 * psi2 * dt * t38 * t32
             t44 = t15 ^ 2
-            t48 = (t15 * psi2 + s) ^ 2
-            F[i,j] = -t34 * t44 * t48 * C0[i,j]
+            @muladd t48 = (t15 * psi2 + s) ^ 2
+            @muladd F[i,j] = -t34 * t44 * t48 * C0[i,j]
         end
     end
 
     # Forward Thomas path
-    alpha[n,:] = -A[n,:] ./ D[n,:]
-    beta[n,:] = F[n,:] ./ D[n,:]
-    for i in n-1:-1:2
-        alpha[i,:] = -A[i,:] ./ (B[i,:] .* alpha[i+1,:] + D[i,:])
-        beta[i,:] = (F[i,:] - B[i,:] .* beta[i+1,:]) ./ (B[i,:] .* alpha[i+1,:] + D[i,:])
+    @inbounds for j in axes(alpha, 2)
+        c = inv(D[n, j])
+        alpha[n, j] = -A[n, j] * c
+        beta[n, j]  =  F[n, j] * c
+    end
+
+    @inbounds for j in axes(alpha, 2), i in n-1:-1:2
+        Bij = B[i,j]
+        Dij = D[i,j]
+        alphaij = alpha[i+1,j]
+        alpha[i, j] = @muladd -A[i, j] / (Bij * alphaij + Dij)
+        beta[i, j]  = @muladd (F[i,j] - Bij * beta[i+1,j]) / (Bij * alphaij + Dij)
     end
 
     # Boundary conditions
@@ -324,17 +351,17 @@ function progonka(C0, dt, it, Di, Xs, Temp, MeltFrac, Dplag, Dscale, Dflux, para
     # BC_parameters.Trace = parameter.Trace
 
     f = (X) -> bc(X, Eq, BC_parameters, TraceElement) # function of dummy variable y
-    result = NLsolve.nlsolve(f, C0[1,:], method = :trust_region) #NLsolve doesnt provide the Levenberg-Marquart method, but trust_region comes close to it
+    result = NLsolve.nlsolve(f, (@views C0[1,:]), method = :trust_region) #NLsolve doesnt provide the Levenberg-Marquart method, but trust_region comes close to it
     out = result.zero  # solution vector
 
-    if result.f_converged <= 0  #convergence
-        println(result.residual_norm) #resiial norm
-    end
-    C[1,:] = out[:]
+    # if result.f_converged <= 0  #convergence
+    #     println(result.residual_norm) #residual norm
+    # end
+    @views C[1,:] = out[:]
 
     # Backward Thomas path
-    for i in 1:n-1
-        C[i+1,:] = C[i,:] .* alpha[i+1,:] + beta[i+1,:]
+    for j in axes(C,2), i in 1:n-1
+        @inbounds C[i+1,j] = @muladd C[i,j] * alpha[i+1,j] + beta[i+1,j]
     end
 
     return C, Czl, Czh, Csat, Dif, S, Dplag, V, W
@@ -343,9 +370,10 @@ end
 
 function TemperatureHistory_m_erupt(tr, Tr, nt, par::NumericalParameters)
     if isempty(tr)
-        ti = range(0, stop=par.tfin, length=nt)
-        Ti = range(par.Tsat, stop=par.Tend+273.15, length=nt)
-        CrFrac1 = mf_rock.(Ti .- 273.15)
+        ti = range(0, stop=par.tfin, length=nt) |> collect
+        Ti = range(par.Tsat, stop=par.Tend+273.15, length=nt) |> collect
+        # CrFrac1 = mf_rock.(Ti .- 273.15)
+        CrFrac1 = [mf_rock(Ti - 273.15) for Ti in Ti]
     else
         istart = findfirst(x -> x > 0, Tr)
         Tr[istart-1] = 950 + 273.15
@@ -360,13 +388,13 @@ function TemperatureHistory_m_erupt(tr, Tr, nt, par::NumericalParameters)
             println("high temperature")
             return Float64[], Float64[], Float64[]
         end
-        time = tr
+        ttime = tr
         Temp = Tr
         try
             it = findfirst(x -> x < Tsat, Temp)
-            time[it-1] = time[it] - (Temp[it] - Tsat) / (Temp[it] - Temp[it-1]) * 5
+            ttime[it-1] = ttime[it] - (Temp[it] - Tsat) / (Temp[it] - Temp[it-1]) * 5
             Temp[it-1] = Tsat
-            time1 = time[it-1:end]
+            time1 = ttime[it-1:end]
             Temp1 = Temp[it-1:end]
             nt = length(time1)
             s = zeros(Temp1)
@@ -378,14 +406,17 @@ function TemperatureHistory_m_erupt(tr, Tr, nt, par::NumericalParameters)
             ti = interp1(s, time1, si)
             Ti = interp1(time1, Temp1, ti)
         catch ME
-            println("wrong Thist for sample: ", sampnum, ", ", ME.message)
-            return [], [], []
+            # println("wrong Thist for sample: ", sampnum, ", ", ME.message)
+            return Float64[], Float64[], Float64[]
         end
         CrFrac1 = mf_rock.(Ti .- 273.15)
     end
     return ti, Ti, CrFrac1
 end
 
+tr_test = Float64[]
+Tr_test = Float64[]
+@btime TemperatureHistory_m_erupt($tr_test, $Tr_test,$500, $parameter_test)
 
 @views function ZirconIsotopeDiffusion(; n = 500, nt = 500, tyear = (3600*24*365))
 
@@ -393,7 +424,7 @@ end
     !isdir("Results") && mkpath("Results")
 
     # parameters for simulations
-    CbulkZr = 100
+    CbulkZr = 100.0
     tyear = 3600*24*365
     iplot = 1 # plot results
     n = 500 # number of points in radial mesh. Can be changed by user depends on desired accuracy
@@ -455,13 +486,13 @@ end
     # parameters for the simulation
     parameter = parameters(;
         Tsat = Tsat, # Starting at saturation
-        Tend = 695,  # final temperature, C
-        tfin = 1500, # final time
+        Tend = 695e0,  # final temperature, C
+        tfin = 1500e0, # final time
         Cbulk = CbulkZr,
         RhoZrM = 4.7/2.3, # Ratio of zircon to melt density
         Kmin = 0.1,  # Parameters for zirconiun partition coefficient in major phase
         Kmax = 0.1,
-        Crit = 30,
+        Crit = 30e0,
         delta = 0.2,
         Ktrace = 0.1, # trace partition coefficient in major phase.
         Trace = "Hf",
@@ -471,7 +502,7 @@ end
     )
     tr = Float64[]
     Tr = Float64[]
-    time, Temp, MeltFrac = TemperatureHistory_m_erupt(tr, Tr, nt, parameter)
+    ttime, Temp, MeltFrac = TemperatureHistory_m_erupt(tr, Tr, nt, parameter)
 
     # BC parameters
     BC_parameter = BC_parameters(;
@@ -482,20 +513,21 @@ end
     # Scaling
     tfin = parameter.tfin[end] # total time in years of the process
     # SCALING-----------------
-    Ds = DiffusionCoefficient((750 + 273.15), XH2O, DGfZr, Di, parameter.mass)
+    DiffusionCoefficient!(Di, (750 + 273.15), XH2O, DGfZr, parameter.mass)
+    Ds = Di
     Dscale = Ds[1]
     tscale = L^2 / Dscale # dimensionless scale for the time
-    time = time ./ tscale
-    # nt = L(time)  # this is obsolete as the nt does not change with scaling
+    ttime = ttime ./ tscale
+    # nt = L(ttime)  # this is obsolete as the nt does not change with scaling
     # END:SCALING-----------------
 
     # Initial Conditions
-    t = time[1] / tscale
+    t = ttime[1] / tscale
     ZirconRadius = 2e-4
     Xs = ZirconRadius / L
     ZircNuc = ZircNuc / L
     S0 = S = (Xs^3 + MeltFrac[1] * (1 - Xs^3))^(1/3)
-    dt = time[2] - time[1]
+    dt = ttime[2] - ttime[1]
     W = 0
     V = 0
 
@@ -517,7 +549,7 @@ end
     RRd[1] = S * 1e4 * L
     ZrPls[1] = XXs[1] # zircon radius in um
     UU[1] = C0[1, 1]
-    tt[1] = time[1] * tscale
+    tt[1] = ttime[1] * tscale
     Zcomp[1,1] = C0[1, 4] / C0[1, 1]
     ZrHF[1,1] = CZirc / KD_trace(Temp[1], TraceElement) / C0[1, 6]
     # Zcomp[1] = C0[1, 4] / C0[1, 1] #matlab version
@@ -530,27 +562,27 @@ end
     @views @. CintS[1, 1:5] = CZircon[1:5] + 4 * π * C0[1, 1:5] * (S^3 - ZirconRadius^3) / 3
 
     # Main loop
-    for i = 2:nt-1
-    # for i = 2:200
+    @views for i = 2:nt-1
         if MeltFrac[i] > 0.01
             C, Czl, Czh, Csat, Dif, S, Dplag, V, W = progonka(C0,dt,i,Di,Xs,Temp,MeltFrac, Dplag, Dscale,Dflux,parameter, BC_parameter, TraceElement; A=A, B=B, C=C, D=D,F=F, alpha=alpha, beta=beta,Eq=Eq, n=n, R=R)
-            dt = time[i] - time[i-1]
+            dt = ttime[i] - ttime[i-1]
             C0 = C
         else
-            Println("I'm groot $i")
             V = 0
             W = 0
         end
         rr = R * (S - Xs) .+ Xs
         Csat = ZrSaturation(Temp[i])
-        CZircon[1:5] = CZircon[1:5] - CZirc * C[1, 1:5] / Csat * 4 * π * Xs^2 * V * dt
-        Cplag[1:5] = Cplag[1:5] - C[end, 1:5] .* Dplag[1:5] * 4 * π * S^2 * W * dt
-        Cint[1:5] .= 0
+        @views CZircon[1:5] = CZircon[1:5] - CZirc * C[1, 1:5] / Csat * 4 * π * Xs^2 * V * dt
+        @views Cplag[1:5] = Cplag[1:5] - C[end, 1:5] .* Dplag[1:5] * 4 * π * S^2 * W * dt
+        @views Cint[1:5] .= 0
         for ik = 2:n
-            Cint[1:5] = Cint[1:5] + (C[ik-1, 1:5] * rr[ik-1]^2 + C[ik, 1:5] * rr[ik]^2) / 2 * (rr[ik] - rr[ik-1])
+            for i in 1:5
+                Cint[i] = Cint[i] + (C[ik-1, i] * rr[ik-1]^2 + C[ik, i] * rr[ik]^2) / 2 * (rr[ik] - rr[ik-1])
+            end
         end
         Cint = 4 * π * Cint + parameter.RhoZrM * CZircon + Cplag
-        CintS[i, 1:5] = Cint[1:5]
+        @views CintS[i, 1:5] = Cint[1:5]
 
         if iplot == 1 && i % floor(nt / 10) == 0
             fig = Figure(size = (800, 800), backgroundcolor = :white)
@@ -577,7 +609,7 @@ end
         XXs[i] = Xs * 1e4 * L  # zircon radius in um
         RRd[i] = S * 1e4 * L  # melt cell radius in um
         VV[i] = -V * L * 1e4 / tscale  # array of dissolution rate
-        tt[i] = time[i] * tscale
+        tt[i] = ttime[i] * tscale
         UU[i] = C[1] - ZrSaturation(Temp[i])
         Tsave[i] = Temp[i] - 273
         ZrPls[i] = minimum(XXs[1:i, 1])
@@ -586,7 +618,7 @@ end
         Zcomp[1,i] = C[1, 4] / C[1, 1]
         Melndelta[1,i] = Ch / Cl
         ZrHF[i] = CZirc / KD_trace(Temp[i], TraceElement) / C0[1, 6]
-        CC[i, 1:n, 1:6] = C0[1:n, 1:6]
+        @views CC[i, 1:n, 1:6] .= C0[1:n, 1:6]
     end
     # Plot results (if iplot is set)
 
@@ -614,52 +646,54 @@ end
 
         display(fig)
     end
-    # Save results
 
-    # Print the figure to a PDF file
-    CairoMakie.save("Results/Test.pdf", fig)
+    # # Save results
 
-    i = nt - 2
+    # # Print the figure to a PDF file
+    # CairoMakie.save("Results/Test.pdf", fig)
 
-    # Convert array to DataFrame
-    Rsave = DataFrame(time_ka = tt[1:i-1] / 1e3, Rad_um = XXs[1:i-1], Gr_rate_mm_a = VV[1:i-1], Temp_C = Tsave[1:i-1], DelZr = DelZr[1:i-1], DelMlt = DelMlt[1:i-1], ZrHf = ZrHF[1:i-1])
+    # i = nt - 2
 
-    # Write DataFrame to CSV file
-    CSV.write("Results/$Runname.csv", Rsave)
+    # # Convert array to DataFrame
+    # Rsave = DataFrame(time_ka = tt[1:i-1] / 1e3, Rad_um = XXs[1:i-1], Gr_rate_mm_a = VV[1:i-1], Temp_C = Tsave[1:i-1], DelZr = DelZr[1:i-1], DelMlt = DelMlt[1:i-1], ZrHf = ZrHF[1:i-1])
 
-    # Append structure to CSV file
-    par = DataFrame(fname = "$Runname")
+    # # Write DataFrame to CSV file
+    # CSV.write("Results/$Runname.csv", Rsave)
 
-    if !isfile("Results/summary.csv")
-        wwar = true
-    else
-        wwar = false
-    end
+    # # Append structure to CSV file
+    # par = DataFrame(fname = "$Runname")
 
-    if wwar
-        CSV.write("Results/summary.csv", par)
-    else
-        existing = CSV.read("Results/summary.csv", DataFrame)
-        append!(existing, par)
-        CSV.write("Results/summary.csv", existing)
-    end
+    # if !isfile("Results/summary.csv")
+    #     wwar = true
+    # else
+    #     wwar = false
+    # end
 
-    return C, XXs, DelZr
+    # if wwar
+    #     CSV.write("Results/summary.csv", par)
+    # else
+    #     existing = CSV.read("Results/summary.csv", DataFrame)
+    #     append!(existing, par)
+    #     CSV.write("Results/summary.csv", existing)
+    # end
+
+    # return C, XXs, DelZr
 end
 
 @code_warntype ZirconIsotopeDiffusion()
 @btime ZirconIsotopeDiffusion()
 ZirconIsotopeDiffusion()
-#Matlab
-# >> sum(C(1,:))
-# ans = 129.4123
-@test sum(C[1,:]) ≈ 129.4123 atol=1e-4
 
-# >> max(XXs)
-# ans = 19.4589
-@test maximum(XXs) ≈ 19.4589 atol=1e-4
+# #Matlab
+# # >> sum(C(1,:))
+# # ans = 129.4123
+# @test sum(C[1,:]) ≈ 129.4123 atol=1e-4
 
-# >> min(DelZr)
-# ans = -2.0528
-# Julia = -2.5351 (tolerance??)
-@test minimum(DelZr[2:end-1]) ≈ -2.0528 atol=1e-3
+# # >> max(XXs)
+# # ans = 19.4589
+# @test maximum(XXs) ≈ 19.4589 atol=1e-4
+
+# # >> min(DelZr)
+# # ans = -2.0528
+# # Julia = -2.5351 (tolerance??)
+# @test minimum(DelZr[2:end-1]) ≈ -2.0528 atol=1e-3
